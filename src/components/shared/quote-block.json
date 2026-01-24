@@ -1,0 +1,10 @@
+{
+  "collectionName": "components_shared_quote_blocks",
+  "info": {
+    "displayName": "Quote Block",
+    "icon": "quote"
+  },
+  "options": {},
+  "attributes": {},
+  "config": {}
+}
