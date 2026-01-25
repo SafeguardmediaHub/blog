@@ -6,7 +6,9 @@ export interface SharedCallout extends Struct.ComponentSchema {
     displayName: 'Callout';
     icon: 'layer';
   };
-  attributes: {};
+  attributes: {
+    message: Schema.Attribute.Text;
+  };
 }
 
 export interface SharedEmbed extends Struct.ComponentSchema {
@@ -15,7 +17,10 @@ export interface SharedEmbed extends Struct.ComponentSchema {
     displayName: 'Embed';
     icon: 'code';
   };
-  attributes: {};
+  attributes: {
+    caption: Schema.Attribute.String;
+    url: Schema.Attribute.String;
+  };
 }
 
 export interface SharedImageBlock extends Struct.ComponentSchema {
@@ -24,7 +29,9 @@ export interface SharedImageBlock extends Struct.ComponentSchema {
     displayName: 'Image Block';
     icon: 'television';
   };
-  attributes: {};
+  attributes: {
+    image: Schema.Attribute.Media<'images' | 'files' | 'videos' | 'audios'>;
+  };
 }
 
 export interface SharedMedia extends Struct.ComponentSchema {
@@ -43,8 +50,8 @@ export interface SharedQuote extends Struct.ComponentSchema {
     icon: 'indent';
   };
   attributes: {
-    body: Schema.Attribute.Text;
-    title: Schema.Attribute.String;
+    author: Schema.Attribute.String;
+    text: Schema.Attribute.Text;
   };
 }
 
@@ -65,7 +72,7 @@ export interface SharedRichText extends Struct.ComponentSchema {
     icon: 'align-justify';
   };
   attributes: {
-    body: Schema.Attribute.RichText;
+    body: Schema.Attribute.Text;
   };
 }
 

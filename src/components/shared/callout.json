@@ -5,6 +5,10 @@
     "icon": "layer"
   },
   "options": {},
-  "attributes": {},
+  "attributes": {
+    "message": {
+      "type": "text"
+    }
+  },
   "config": {}
 }

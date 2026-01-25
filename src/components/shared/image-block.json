@@ -5,6 +5,17 @@
     "icon": "television"
   },
   "options": {},
-  "attributes": {},
+  "attributes": {
+    "image": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": [
+        "images",
+        "files",
+        "videos",
+        "audios"
+      ]
+    }
+  },
   "config": {}
 }

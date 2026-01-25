@@ -6,11 +6,11 @@
   },
   "options": {},
   "attributes": {
-    "title": {
-      "type": "string"
-    },
-    "body": {
+    "text": {
       "type": "text"
+    },
+    "author": {
+      "type": "string"
     }
   }
 }
