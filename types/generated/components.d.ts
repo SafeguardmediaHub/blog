@@ -72,7 +72,7 @@ export interface SharedRichText extends Struct.ComponentSchema {
     icon: 'align-justify';
   };
   attributes: {
-    body: Schema.Attribute.Text;
+    body: Schema.Attribute.Blocks;
   };
 }
 
