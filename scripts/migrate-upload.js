@@ -4,6 +4,8 @@
  * Order: Media → Authors → Categories → Tags → Blog Posts
  * (Blog posts depend on the other three being created first)
  *
+ * Safe to re-run — checks for existing entries and skips duplicates.
+ *
  * Usage:
  *   STRAPI_DEST_URL=https://your-new-strapi.com \
  *   STRAPI_DEST_TOKEN=your-api-token \
@@ -14,6 +16,7 @@
 
 const fs = require('fs-extra');
 const path = require('path');
+const qs = require('qs');
 const dotenv = require('dotenv');
 dotenv.config();
 
@@ -34,7 +37,7 @@ const idMaps = {
   authors: {}, // name -> new documentId
   categories: {}, // slug -> new documentId
   tags: {}, // slug -> new documentId
-  media: {}, // localFile -> new media id
+  media: {}, // localFile -> new media object
 };
 
 // --- Helpers ---
@@ -45,6 +48,24 @@ function loadJSON(filename) {
     return null;
   }
   return fs.readJSONSync(filePath);
+}
+
+async function strapiGet(endpoint, params = {}) {
+  const queryString = qs.stringify(params, { arrayFormat: 'brackets' });
+  const url = `${DEST_URL}${endpoint}${queryString ? `?${queryString}` : ''}`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${DEST_TOKEN}`,
+      'Content-Type': 'application/json',
+    },
+  });
+
+  if (!res.ok) {
+    const errorBody = await res.text().catch(() => '');
+    throw new Error(`GET ${endpoint} → ${res.status}: ${errorBody}`);
+  }
+
+  return res.json();
 }
 
 async function strapiPost(endpoint, data) {
@@ -68,12 +89,11 @@ async function strapiPost(endpoint, data) {
 
 /**
  * Upload a media file via Strapi's upload API
- * Returns the media object from Strapi (with id, url, etc.)
  */
 async function uploadMedia(mediaRef) {
   if (!mediaRef || !mediaRef.localFile) return null;
 
-  // Check if already uploaded
+  // Check if already uploaded in this run
   if (idMaps.media[mediaRef.localFile]) {
     return idMaps.media[mediaRef.localFile];
   }
@@ -84,7 +104,7 @@ async function uploadMedia(mediaRef) {
     return null;
   }
 
-  const FormData = (await import('undici')).FormData;
+  const { FormData } = require('undici');
   const formData = new FormData();
 
   const fileBuffer = await fs.readFile(filePath);
@@ -110,7 +130,7 @@ async function uploadMedia(mediaRef) {
   }
 
   const result = await res.json();
-  const uploaded = result[0]; // Upload API returns an array
+  const uploaded = result[0];
   console.log(`    Uploaded: ${mediaRef.localFile} → id ${uploaded.id}`);
 
   idMaps.media[mediaRef.localFile] = uploaded;
@@ -124,6 +144,18 @@ async function uploadAuthors(authors) {
   if (!authors) return;
 
   for (const author of authors) {
+    // Check if author already exists
+    const existing = await strapiGet('/api/authors', {
+      filters: { name: { $eq: author.name } },
+    });
+
+    if (existing.data && existing.data.length > 0) {
+      const doc = existing.data[0];
+      idMaps.authors[author.name] = doc.documentId;
+      console.log(`  Skipping (exists): ${author.name} → ${doc.documentId}`);
+      continue;
+    }
+
     console.log(`  Creating author: ${author.name}`);
 
     // Upload avatar first if present
@@ -137,17 +169,13 @@ async function uploadAuthors(authors) {
       name: author.name,
       bio: author.bio || null,
       email: author.email || null,
+      avatar: avatarId,
     };
 
     const res = await strapiPost('/api/authors', payload);
     const newId = res.data.documentId;
     idMaps.authors[author.name] = newId;
     console.log(`    Created: ${author.name} → ${newId}`);
-
-    // Attach avatar via separate upload link if needed
-    if (avatarId) {
-      await linkMediaToEntry('api::author.author', res.data.id, 'avatar', avatarId);
-    }
   }
 }
 
@@ -156,6 +184,18 @@ async function uploadCategories(categories) {
   if (!categories) return;
 
   for (const cat of categories) {
+    // Check if category already exists
+    const existing = await strapiGet('/api/categories', {
+      filters: { slug: { $eq: cat.slug } },
+    });
+
+    if (existing.data && existing.data.length > 0) {
+      const doc = existing.data[0];
+      idMaps.categories[cat.slug] = doc.documentId;
+      console.log(`  Skipping (exists): ${cat.name} → ${doc.documentId}`);
+      continue;
+    }
+
     console.log(`  Creating category: ${cat.name}`);
 
     const payload = {
@@ -178,6 +218,18 @@ async function uploadTags(tags) {
   if (!tags) return;
 
   for (const tag of tags) {
+    // Check if tag already exists
+    const existing = await strapiGet('/api/tags', {
+      filters: { slug: { $eq: tag.slug } },
+    });
+
+    if (existing.data && existing.data.length > 0) {
+      const doc = existing.data[0];
+      idMaps.tags[tag.slug] = doc.documentId;
+      console.log(`  Skipping (exists): ${tag.name} → ${doc.documentId}`);
+      continue;
+    }
+
     console.log(`  Creating tag: ${tag.name}`);
 
     const payload = {
@@ -195,36 +247,22 @@ async function uploadTags(tags) {
   }
 }
 
-/**
- * Link a media file to an entry field using Strapi's upload API
- */
-async function linkMediaToEntry(uid, entryId, field, mediaId) {
-  const url = `${DEST_URL}/api/upload?id=${entryId}&model=${uid}&field=${field}`;
-  // Use the PUT method on the content API instead
-  const apiEndpoint = uid.replace('api::', '').split('.')[0];
-  const putUrl = `${DEST_URL}/api/${apiEndpoint}s/${entryId}`;
-
-  // Actually, just set the relation via the content API update
-  const res = await fetch(putUrl, {
-    method: 'PUT',
-    headers: {
-      Authorization: `Bearer ${DEST_TOKEN}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ data: { [field]: mediaId } }),
-  });
-
-  if (!res.ok) {
-    const errorBody = await res.text().catch(() => '');
-    console.warn(`    Warning: Could not link ${field} to entry: ${errorBody}`);
-  }
-}
-
 async function uploadBlogPosts(posts) {
   console.log('\n--- Uploading Blog Posts ---');
   if (!posts) return;
 
   for (const post of posts) {
+    // Check if post already exists
+    const existing = await strapiGet('/api/blog-posts', {
+      filters: { slug: { $eq: post.slug } },
+      publicationState: 'preview',
+    });
+
+    if (existing.data && existing.data.length > 0) {
+      console.log(`  Skipping (exists): "${post.title}"`);
+      continue;
+    }
+
     console.log(`  Creating post: "${post.title}"`);
 
     // Upload cover image
@@ -287,10 +325,7 @@ async function uploadBlogPosts(posts) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          data: {
-            // Re-send minimal data to trigger publish
-            title: post.title,
-          },
+          data: { title: post.title },
           status: 'published',
         }),
       });
@@ -356,13 +391,11 @@ async function main() {
   console.log('=== Strapi Migration — Step 3: Upload ===');
   console.log(`Destination: ${DEST_URL}`);
 
-  // Load transformed data
   const authors = loadJSON('authors.json');
   const categories = loadJSON('categories.json');
   const tags = loadJSON('tags.json');
   const blogPosts = loadJSON('blog-posts.json');
 
-  // Upload in order: authors, categories, tags first (blog posts depend on them)
   await uploadAuthors(authors);
   await uploadCategories(categories);
   await uploadTags(tags);
@@ -370,15 +403,15 @@ async function main() {
 
   // Summary
   console.log('\n=== Upload Summary ===');
-  console.log(`  Authors:    ${Object.keys(idMaps.authors).length} created`);
-  console.log(`  Categories: ${Object.keys(idMaps.categories).length} created`);
-  console.log(`  Tags:       ${Object.keys(idMaps.tags).length} created`);
+  console.log(`  Authors:    ${Object.keys(idMaps.authors).length}`);
+  console.log(`  Categories: ${Object.keys(idMaps.categories).length}`);
+  console.log(`  Tags:       ${Object.keys(idMaps.tags).length}`);
   console.log(`  Media:      ${Object.keys(idMaps.media).length} uploaded`);
   console.log('\nMigration complete!');
 
   // Save ID mappings for reference
   await fs.writeJSON(path.join(INPUT_DIR, 'id-mappings.json'), idMaps, { spaces: 2 });
-  console.log('ID mappings saved to: migration-data/id-mappings.json');
+  console.log('ID mappings saved to: migration-data/transformed/id-mappings.json');
 }
 
 main().catch((err) => {
