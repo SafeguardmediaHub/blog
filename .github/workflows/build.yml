@@ -1,0 +1,50 @@
+name: Blog CMS Build
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Install doctl + authenticate
+      - name: Install and authenticate doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      # Login to DOCR
+      - name: Log in to DigitalOcean Container Registry
+        run: doctl registry login --expiry-seconds 1200
+        env:
+          DIGITALOCEAN_ACCESS_TOKEN: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      # Build image
+      - name: Build Docker image
+        run: docker build -t registry.digitalocean.com/safeguardmedia-backend/blog:${{ github.sha }} .
+
+      # Push image
+      - name: Push Docker image
+        run: |
+          docker push registry.digitalocean.com/safeguardmedia-backend/blog:${{ github.sha }}
+          docker tag registry.digitalocean.com/safeguardmedia-backend/blog:${{ github.sha }} registry.digitalocean.com/safeguardmedia-backend/blog:latest
+          docker push registry.digitalocean.com/safeguardmedia-backend/blog:latest
+
+      # Cleanup old images (keep last 3)
+      - name: Cleanup old images (keep last 3)
+        run: |
+          REPO="blog"
+          tags=$(doctl registry repository list-tags $REPO \
+            --format "Tag,CreatedAt" --no-header | sort -rk2 | awk '{print $1}')
+
+          old_tags=$(echo "$tags" | tail -n +4)
+          for tag in $old_tags; do
+            echo "Deleting old tag: $tag"
+            doctl registry repository delete-tag $REPO $tag -f
+          done

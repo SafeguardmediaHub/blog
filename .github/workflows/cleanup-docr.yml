@@ -1,0 +1,35 @@
+name: Cleanup Blog DOCR Images
+
+on:
+  schedule:
+    - cron: "0 3 * * 0" # Runs weekly on Sundays at 3AM UTC
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install doctl
+        run: |
+          curl -sL https://github.com/digitalocean/doctl/releases/download/v1.112.0/doctl-1.112.0-linux-amd64.tar.gz | tar -xzv
+          sudo mv doctl /usr/local/bin
+
+      - name: Authenticate doctl
+        run: doctl auth init -t ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: List repositories
+        run: doctl registry repository list --no-header
+
+      - name: Delete old images (keep last 2)
+        run: |
+          REPO="blog"
+          IMAGES=$(doctl registry repository list-tags $REPO --format "Tag,CreatedAt" --no-header | sort -k2 -r)
+          COUNT=0
+          echo "$IMAGES" | while read TAG CREATED; do
+            if [ $COUNT -ge 2 ]; then
+              echo "Deleting old tag: $TAG"
+              doctl registry repository delete-tag -f $REPO $TAG
+            fi
+            COUNT=$((COUNT+1))
+          done

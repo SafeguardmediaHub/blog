@@ -1,0 +1,57 @@
+name: Deploy Blog CMS
+
+on:
+  workflow_dispatch: # manual trigger
+  workflow_run:
+    workflows: ["Blog CMS Build"]
+    types:
+      - completed
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Wait for registry propagation
+        run: sleep 15
+
+      - name: Deploy to Droplet
+        uses: appleboy/ssh-action@v1.1.0
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: root
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          script: |
+            echo "Starting blog CMS deployment..."
+
+            echo "Logging into DigitalOcean Container Registry..."
+            echo "${{ secrets.DOCR_TOKEN }}" | docker login registry.digitalocean.com --username oauth2 --password-stdin
+
+            # Pull latest image
+            echo "Pulling latest image..."
+            docker pull registry.digitalocean.com/safeguardmedia-backend/blog:latest
+
+            # Stop and remove old container (ignore errors if not running)
+            echo "Stopping old container..."
+            docker stop blog-cms || true
+            docker rm blog-cms || true
+
+            # Run new container
+            echo "Starting new container..."
+            docker run -d \
+              --name blog-cms \
+              -p 1337:1337 \
+              --env-file /root/blog/.env \
+              -v /root/blog/uploads:/app/public/uploads \
+              --restart unless-stopped \
+              registry.digitalocean.com/safeguardmedia-backend/blog:latest
+
+            # Prune old images to free up space
+            echo "Cleaning up old Docker images..."
+            docker image prune -af
+
+            echo "Blog CMS deployment complete!"

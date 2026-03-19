@@ -1,0 +1,69 @@
+# Node
+node_modules
+npm-debug.log
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Logs
+*.log
+logs
+*.pid
+*.seed
+*.pid.lock
+
+# Runtime data
+pids
+*.sock
+
+# Dependency caches
+.cache
+.tmp
+.tmp/
+
+# Build output
+dist
+build
+coverage
+
+# Environment
+.env
+.env.*.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# IDE
+.idea
+.vscode
+nbproject
+
+# Strapi
+.strapi
+.strapi-updater.json
+.strapi-cloud.json
+license.txt
+exports
+
+# Uploads (will be mounted as volume)
+public/uploads/*
+!public/uploads/.gitkeep
+
+# Docs
+README.md
+strapi.md
+*.md
+
+# Data/seeds
+data/
+scripts/
